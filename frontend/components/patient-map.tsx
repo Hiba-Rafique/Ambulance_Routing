@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
+import type * as Leaflet from 'leaflet';
 import { Coordinates, City } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 
@@ -16,12 +16,18 @@ export const PatientMap: React.FC<PatientMapProps> = ({
   onLocationSelect, 
   selectedLocation 
 }) => {
-  const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
+  const mapRef = useRef<Leaflet.Map | null>(null);
+  const markerRef = useRef<Leaflet.Marker | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    // Leaflet depends on the `window` object, so we load it only on the
+    // client inside this effect. This avoids the "window is not defined"
+    // error during Next.js server-side rendering.
+    if (typeof window === 'undefined' || !containerRef.current) return;
+
+    // Dynamically import Leaflet only on the client.
+    const L = require('leaflet') as typeof Leaflet;
 
     // Initialize map
     mapRef.current = L.map(containerRef.current).setView(
@@ -57,7 +63,7 @@ export const PatientMap: React.FC<PatientMapProps> = ({
     });
 
     // Add existing marker if location provided
-    if (selectedLocation && !markerRef.current) {
+    if (selectedLocation && !markerRef.current && mapRef.current) {
       markerRef.current = L.marker([selectedLocation.lat, selectedLocation.lng]).addTo(mapRef.current);
       markerRef.current.bindPopup('Patient Location').openPopup();
     }

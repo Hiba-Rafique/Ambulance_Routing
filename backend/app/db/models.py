@@ -59,10 +59,17 @@ class Ambulance(Base):
 class EmergencyRequest(Base):
     __tablename__ = "emergency_requests"
     id = Column(Integer, primary_key=True, index=True)
+    # basic caller information for practical contact/record keeping
+    caller_name = Column(String(100), nullable=True)
+    caller_phone = Column(String(20), nullable=True)
     source_node = Column(Integer, ForeignKey("nodes.id")) # patient location
     destination_node = Column(Integer, ForeignKey("nodes.id")) # hospital location
-    status = Column(String(20), default="pending")  # pending / in-progress / completed
+    status = Column(String(20), default="pending")  # pending / in-progress / completed / cancelled
     created_at = Column(DateTime, default=datetime.utcnow)
+    # timestamps for lifecycle events; kept nullable to avoid breaking existing data
+    completed_at = Column(DateTime, nullable=True)  # when request fully completed
+    cancelled_at = Column(DateTime, nullable=True)  # when request was cancelled (if ever)
+    cancellation_reason = Column(String(200), nullable=True)
 
     
     source = relationship("Node", foreign_keys=[source_node])
