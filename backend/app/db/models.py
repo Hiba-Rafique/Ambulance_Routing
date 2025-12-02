@@ -47,7 +47,7 @@ class Ambulance(Base):
     __tablename__ = "ambulances"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50))
-    status = Column(String(20), default="available")  # available / busy
+    status = Column(String(20), default="available")  # available / assigned
     current_node = Column(Integer, ForeignKey("nodes.id"))
     speed = Column(Float, default=60.0)  # km/h
 

@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple, Iterable, Optional
 
 from sqlalchemy.orm import Session
 
-from ...db.models import Node, Edge
+from app.db.models import Node, Edge
 
 
 # Type aliases for clarity when explaining the DSA side

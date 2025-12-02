@@ -56,7 +56,7 @@ export const PatientMap: React.FC<PatientMapProps> = ({
             iconAnchor: [20, 20],
             popupAnchor: [0, -20],
           }),
-        }).addTo(mapRef.current);
+        }).addTo(mapRef.current!);
 
         markerRef.current.bindPopup('Patient Location', { className: 'dark-popup' }).openPopup();
       }

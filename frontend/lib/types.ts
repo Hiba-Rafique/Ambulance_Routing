@@ -26,7 +26,7 @@ export interface City {
 export interface Ambulance {
   id: string;
   current_location: Coordinates;
-  status: 'available' | 'en_route' | 'at_hospital' | 'busy';
+  status: 'available' | 'en_route' | 'at_hospital' | 'busy' | 'arrived';
   vehicle_type: 'standard' | 'advanced_life_support';
   estimated_arrival: number; // seconds
 }
