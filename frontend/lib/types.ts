@@ -14,6 +14,7 @@ export interface Hospital {
 export interface City {
   id: string;
   name: string;
+  backendId: number;
   bounds: {
     north: number;
     south: number;
@@ -29,6 +30,7 @@ export interface Ambulance {
   status: 'available' | 'en_route' | 'at_hospital' | 'busy' | 'arrived';
   vehicle_type: 'standard' | 'advanced_life_support';
   estimated_arrival: number; // seconds
+  progress?: number; // 0-1 fraction along route
 }
 
 export interface Route {

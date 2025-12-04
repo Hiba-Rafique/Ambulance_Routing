@@ -11,6 +11,7 @@ This module modifies the in-memory graph to reflect:
 """
 
 from typing import List, Tuple
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.db.models import TrafficUpdate, Roadblock, Edge, Node
 
@@ -27,15 +28,19 @@ def apply_dynamic_traffic(graph, db: Session, city_id: int):
     2. Updates weights for edges with traffic updates
     """
 
+    now = datetime.utcnow()
+
     # -------------------------------
     # 1. ROADBLOCKS → REMOVE edges
     # -------------------------------
-    # Collect all edge_ids that are blocked
+    # Collect all edge_ids that are currently blocked (start_time <= now <= end_time or end_time is NULL)
     active_roadblocks = (
         db.query(Roadblock)
         .join(Roadblock.edge)
         .join(Edge.from_node_rel)
         .filter(Node.city_id == city_id)
+        .filter(Roadblock.start_time <= now)
+        .filter((Roadblock.end_time.is_(None)) | (Roadblock.end_time >= now))
         .all()
     )
 
@@ -57,13 +62,20 @@ def apply_dynamic_traffic(graph, db: Session, city_id: int):
     # -------------------------------
     # 2. TRAFFIC UPDATES → MODIFY weight
     # -------------------------------
-    traffic_updates = (
-        db.query(TrafficUpdate)
-        .join(TrafficUpdate.edge)
-        .join(Edge.from_node_rel)
-        .filter(Node.city_id == city_id)
-        .all()
-    )
+    # Simple time-of-day model using current UTC hour. During peak hours we
+    # apply traffic updates; outside those hours we ignore them.
+    peak_hours = {7, 8, 9, 16, 17, 18}  # configurable: morning & evening rush
+
+    if now.hour in peak_hours:
+        traffic_updates = (
+            db.query(TrafficUpdate)
+            .join(TrafficUpdate.edge)
+            .join(Edge.from_node_rel)
+            .filter(Node.city_id == city_id)
+            .all()
+        )
+    else:
+        traffic_updates = []
 
     # Build a lookup: (from_node, to_node) -> new_weight
     traffic_weights = {}

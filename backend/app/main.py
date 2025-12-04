@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import routing, traffic, ambulance, websocket
+from app.routers import routing, traffic, ambulance, websocket, cities
 
 app = FastAPI(title="DSA Ambulance Routing")
 
@@ -17,6 +17,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(routing.router, prefix="/route", tags=["Route"])
+app.include_router(cities.router, prefix="/route", tags=["Cities"])
 app.include_router(traffic.router, prefix="/traffic", tags=["Traffic"])
 app.include_router(ambulance.router, prefix="/ambulance", tags=["Ambulance"])
 app.include_router(websocket.router, tags=["WebSocket"])

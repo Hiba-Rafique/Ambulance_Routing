@@ -8,48 +8,17 @@ import { PatientMap } from '@/components/patient-map';
 import { HospitalSelect } from '@/components/hospital-select';
 import { ConfirmRequest } from '@/components/confirm-request';
 import { LiveMap } from '@/components/live-map';
+import { DijkstraVisualizer } from '@/components/dijkstra-visualizer';
 import { City, Hospital, Coordinates, EmergencyRequest, Ambulance, Route } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { createAutoEmergencyRequest, fetchHospitalsForCity, geocodeAddress } from '@/lib/api';
-
-const MOCK_CITIES: City[] = [
-  {
-    id: 'city_karachi',
-    name: 'Karachi',
-    bounds: { north: 25.05, south: 24.75, east: 67.35, west: 66.85 },
-    center: { lat: 24.8607, lng: 67.0011 },
-  },
-  {
-    id: 'city_lahore',
-    name: 'Lahore',
-    bounds: { north: 31.65, south: 31.35, east: 74.45, west: 73.95 },
-    center: { lat: 31.5204, lng: 74.3587 },
-  },
-  {
-    id: 'city_islamabad',
-    name: 'Islamabad',
-    bounds: { north: 33.85, south: 33.55, east: 73.35, west: 72.85 },
-    center: { lat: 33.6844, lng: 73.0479 },
-    },
-  {
-    id: 'city_rawalpindi',
-    name: 'Rawalpindi',
-    bounds: { north: 33.65, south: 33.35, east: 73.45, west: 72.95 },
-    center: { lat: 33.5731, lng: 73.1795 },
-  },
-  {
-    id: 'city_multan',
-    name: 'Multan',
-    bounds: { north: 30.35, south: 29.95, east: 72.05, west: 71.35 },
-    center: { lat: 30.1978, lng: 71.4455 },
-  },
-];
+import { createAutoEmergencyRequest, fetchHospitalsForCity, geocodeAddress, fetchCities } from '@/lib/api';
 
 // Hospitals will now be loaded from the backend based on the selected city.
 
 export default function Home() {
   const [step, setStep] = useState<'city' | 'location' | 'hospital' | 'confirm' | 'live'>('city');
+  const [cities, setCities] = useState<City[]>([]);
   const [selectedCity, setSelectedCity] = useState<City | undefined>();
   const [selectedLocation, setSelectedLocation] = useState<Coordinates | undefined>();
   const [selectedHospital, setSelectedHospital] = useState<Hospital | undefined>();
@@ -64,6 +33,77 @@ export default function Home() {
     label: '',
   });
   const wsRef = useRef<WebSocket | null>(null);
+  const [showDijkstra, setShowDijkstra] = useState(false);
+  const [dijkstraOffset, setDijkstraOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDraggingDijkstra, setIsDraggingDijkstra] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingDijkstra || !dragStartRef.current) return;
+      const { x, y } = dragStartRef.current;
+      setDijkstraOffset({ x: e.clientX - x, y: e.clientY - y });
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingDijkstra) {
+        setIsDraggingDijkstra(false);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingDijkstra]);
+
+  useEffect(() => {
+    const loadCities = async () => {
+      try {
+        const backendCities = await fetchCities();
+        const mapped: City[] = backendCities.map((c) => {
+          // Default fallback roughly covering Pakistan
+          let bounds = { north: 37.0, south: 23.0, east: 77.0, west: 60.0 };
+          let center = { lat: 30.3753, lng: 69.3451 };
+
+          const name = c.name.toLowerCase();
+
+          if (name === 'karachi') {
+            bounds = { north: 25.05, south: 24.75, east: 67.35, west: 66.85 };
+            center = { lat: 24.8607, lng: 67.0011 };
+          } else if (name === 'lahore') {
+            bounds = { north: 31.65, south: 31.35, east: 74.45, west: 73.95 };
+            center = { lat: 31.5204, lng: 74.3587 };
+          } else if (name === 'islamabad') {
+            bounds = { north: 33.85, south: 33.55, east: 73.35, west: 72.85 };
+            center = { lat: 33.6844, lng: 73.0479 };
+          } else if (name === 'rawalpindi') {
+            bounds = { north: 33.65, south: 33.35, east: 73.45, west: 72.95 };
+            center = { lat: 33.5731, lng: 73.1795 };
+          } else if (name === 'multan') {
+            bounds = { north: 30.35, south: 29.95, east: 72.05, west: 71.35 };
+            center = { lat: 30.1978, lng: 71.4455 };
+          }
+
+          return {
+            id: `city_${c.id}`,
+            name: c.name,
+            backendId: c.id,
+            bounds,
+            center,
+          };
+        });
+        setCities(mapped);
+      } catch (error) {
+        console.error('Failed to load cities', error);
+      }
+    };
+
+    loadCities();
+  }, []);
 
   // Real WebSocket connection for live updates
   useEffect(() => {
@@ -93,7 +133,10 @@ export default function Home() {
                 estimated_arrival: data.eta_seconds !== undefined
                   ? Math.round(data.eta_seconds)
                   : Math.max(0, prev.estimated_arrival - 2),
-                status: 'en_route'
+                status: 'en_route',
+                progress: typeof data.progress === 'number'
+                  ? Math.min(1, Math.max(0, data.progress))
+                  : prev.progress,
               };
             });
           } else if (data.status === 'completed') {
@@ -103,7 +146,8 @@ export default function Home() {
                 ...prev,
                 current_location: data.current_location,
                 estimated_arrival: 0,
-                status: 'available'
+                status: 'available',
+                progress: 1,
               };
             });
             setRequest((prev) => prev ? { ...prev, status: 'completed', completed_at: data.completed_at } : undefined);
@@ -130,21 +174,32 @@ export default function Home() {
     }
   }, [step, request]);
 
+  // Fallback client-side ETA countdown to keep the timer moving even if
+  // WebSocket updates are intermittent. Backend updates (eta_seconds)
+  // still take precedence whenever they arrive.
+  useEffect(() => {
+    if (step !== 'live' || !ambulance) return;
+
+    const interval = setInterval(() => {
+      setAmbulance((prev) => {
+        if (!prev) return prev;
+        if (prev.estimated_arrival <= 0) return prev;
+        return {
+          ...prev,
+          estimated_arrival: Math.max(0, prev.estimated_arrival - 1),
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [step, ambulance]);
+
   const handleCitySelect = async (city: City) => {
     setSelectedCity(city);
     setSelectedHospital(undefined);
     setStep('location');
 
-    // TEMP mapping from frontend city ids to numeric backend ids.
-    const cityIdMapping: Record<string, number> = {
-      city_karachi: 1,
-      city_lahore: 2,
-      city_islamabad: 3,
-      city_rawalpindi: 4,
-      city_multan: 5,
-    };
-
-    const numericCityId = cityIdMapping[city.id];
+    const numericCityId = city.backendId;
 
     if (numericCityId) {
       try {
@@ -200,17 +255,7 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      // TEMP mapping from frontend city ids to numeric backend ids.
-      // Later you can load real city ids from the backend instead of hardcoding.
-      const cityIdMapping: Record<string, number> = {
-        city_karachi: 1,
-        city_lahore: 2,
-        city_islamabad: 3,
-        city_rawalpindi: 4,
-        city_multan: 5,
-      };
-
-      const numericCityId = cityIdMapping[selectedCity.id];
+      const numericCityId = selectedCity.backendId;
 
       const apiResponse = await createAutoEmergencyRequest({
         cityNumericId: numericCityId,
@@ -246,13 +291,17 @@ export default function Home() {
           : 0,
       };
 
+      const polylineFromBackend = apiResponse.route_nodes && apiResponse.route_nodes.length > 0
+        ? apiResponse.route_nodes.map((n) => ({ lat: n.lat, lng: n.lon }))
+        : generateMockPolyline(selectedHospital.location, selectedLocation);
+
       const mockRoute: Route = {
-        distance: 5.2, // This should ideally also come from backend, but keeping mock for now as per plan
+        distance: apiResponse.distance_km !== null ? apiResponse.distance_km : 0,
         duration: (apiResponse.estimated_travel_time !== null && apiResponse.estimated_travel_time !== undefined)
           ? Math.round(apiResponse.estimated_travel_time * 60)
           : 0,
         traffic_level: Math.random() > 0.5 ? 'high' : 'moderate',
-        polyline: generateMockPolyline(selectedHospital.location, selectedLocation),
+        polyline: polylineFromBackend,
       };
 
       setAmbulance(mockAmbulance);
@@ -283,7 +332,7 @@ export default function Home() {
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 md:py-8">
         <div className="max-w-7xl mx-auto">
           {step === 'city' && (
-            <CitySelect cities={MOCK_CITIES} onSelect={handleCitySelect} selectedCity={selectedCity} />
+            <CitySelect cities={cities} onSelect={handleCitySelect} selectedCity={selectedCity} />
           )}
 
           {step === 'location' && selectedCity && (
@@ -502,14 +551,24 @@ export default function Home() {
                     Track the ambulance in real time on the map. You can start a new request once this one is completed.
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={handleReset}
-                  className="shrink-0"
-                >
-                  New request
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={handleReset}
+                    className="shrink-0"
+                  >
+                    New request
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={() => setShowDijkstra(true)}
+                    className="shrink-0 bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm border border-accent/40"
+                  >
+                    View Dijkstra visualization
+                  </Button>
+                </div>
               </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="lg:col-span-3">
                   <LiveMap
@@ -583,6 +642,41 @@ export default function Home() {
                   )}
                 </div>
               </div>
+
+              {request && showDijkstra && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                  <div
+                    className="relative w-full max-w-6xl h-[90vh] rounded-xl bg-background border border-border shadow-2xl flex flex-col"
+                    style={{ transform: `translate(${dijkstraOffset.x}px, ${dijkstraOffset.y}px)` }}
+                  >
+                    <div
+                      className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/70 cursor-move select-none"
+                      onMouseDown={(e) => {
+                        setIsDraggingDijkstra(true);
+                        dragStartRef.current = {
+                          x: e.clientX - dijkstraOffset.x,
+                          y: e.clientY - dijkstraOffset.y,
+                        };
+                      }}
+                    >
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Algorithm visualization</p>
+                        <h2 className="text-sm font-semibold">Dijkstra for request #{request.id}</h2>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowDijkstra(false)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+                    <div className="flex-1 p-3 md:p-4 overflow-auto">
+                      <DijkstraVisualizer requestId={Number(request.id)} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -607,7 +701,6 @@ function generateMockPolyline(start: Coordinates, end: Coordinates): Coordinates
   points.push(end);
   return points;
 }
-
 
 
 

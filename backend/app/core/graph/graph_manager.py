@@ -49,6 +49,24 @@ class GraphManager:
 
     # adjacency list: node_id -> list of (neighbor_node_id, weight, edge_id)
     adjacency: Dict[NodeId, List[AdjacencyEntry]]
+    # edge_id -> Edge object for distance lookup
+    edges: Dict[EdgeId, Edge]
+
+    def __post_init__(self):
+        if not hasattr(self, 'adjacency'):
+            self.adjacency = {}
+        if not hasattr(self, 'edges'):
+            self.edges = {}
+
+    def get_edge(self, from_node: NodeId, to_node: NodeId) -> Optional[Edge]:
+        """Get the edge object between two nodes if it exists."""
+        if from_node not in self.adjacency:
+            return None
+            
+        for neighbor, _, edge_id in self.adjacency[from_node]:
+            if neighbor == to_node:
+                return self.edges.get(edge_id)
+        return None
 
     def neighbors(self, node_id: NodeId) -> List[AdjacencyEntry]:
         """Return all outgoing edges from a node.
@@ -98,41 +116,30 @@ def build_graph_for_city(db: Session, city_id: int) -> GraphManager:
     2. Load all edges where both endpoints are in those nodes.
     3. For each edge, compute its effective weight and insert it into
        the adjacency list of `from_node`.
+    4. Store the edge objects for distance lookup.
     """
-
     # Step 1: load nodes of this city and collect their IDs.
     nodes: Iterable[Node] = (
         db.query(Node).filter(Node.city_id == city_id).all()
     )
     node_ids = {node.id for node in nodes}
 
-    # Initialize adjacency list with empty lists so that even isolated nodes
-    # are present in the graph.
-    adjacency: Dict[NodeId, List[AdjacencyEntry]] = {nid: [] for nid in node_ids}
+    # 2. Create empty adjacency list for each node
+    graph = GraphManager(adjacency={node.id: [] for node in nodes}, edges={})
 
-    if not node_ids:
-        # If the city has no nodes yet, we simply return an empty graph.
-        return GraphManager(adjacency=adjacency)
-
-    # Step 2: load edges whose endpoints belong to this city.
-    edges: Iterable[Edge] = (
+    # 3. Load all edges where both endpoints are in this city
+    edges = (
         db.query(Edge)
         .filter(Edge.from_node.in_(node_ids))
         .filter(Edge.to_node.in_(node_ids))
         .all()
     )
 
-    # Step 3: populate adjacency list with effective weights.
+    # 4. Populate the adjacency list with edges that have valid weights
     for edge in edges:
-        effective_weight = _compute_effective_weight(edge)
-        if effective_weight is None:
-            # Edge is inactive; we skip it entirely.
-            continue
+        weight = _compute_effective_weight(edge)
+        if weight is not None:
+            graph.adjacency[edge.from_node].append((edge.to_node, weight, edge.id))
+            graph.edges[edge.id] = edge
 
-        # At this point we know:
-        # - edge.from_node is in node_ids
-        # - edge.to_node is in node_ids
-        # So we can safely add it to the adjacency list.
-        adjacency[edge.from_node].append((edge.to_node, effective_weight, edge.id))
-
-    return GraphManager(adjacency=adjacency)
+    return graph

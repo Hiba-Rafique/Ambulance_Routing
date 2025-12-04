@@ -85,6 +85,7 @@ def auto_select_hospital_for_location(
         graph=graph,
         source_node_id=source_node_id,
         hospital_node_ids=hospital_ids,
+        db=db  # Pass the database session for distance calculation
     )
 
     # Result is a HospitalSelectionResult with:

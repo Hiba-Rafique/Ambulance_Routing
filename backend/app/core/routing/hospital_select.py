@@ -23,8 +23,11 @@ from __future__ import annotations
 import heapq
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
+from sqlalchemy.orm import Session
 
 from ..graph.graph_manager import GraphManager, NodeId, AdjacencyEntry
+from ...db.models import Node
+from ...core.utils.geo import haversine_distance
 
 
 @dataclass
@@ -39,6 +42,8 @@ class HospitalSelectionResult:
     best_distance:
         The travel time (sum of edge weights) to reach `best_hospital_id`.
         If `best_hospital_id` is None, this will also be None.
+    distance_km:
+        The actual distance in kilometers to the best hospital, if known.
     distances:
         A dictionary mapping *all* visited node_ids to their shortest known
         distance from the source. This is useful if later we want to
@@ -48,12 +53,14 @@ class HospitalSelectionResult:
     best_hospital_id: Optional[NodeId]
     best_distance: Optional[float]
     distances: Dict[NodeId, float]
+    distance_km: Optional[float] = None
 
 
 def find_nearest_hospital(
     graph: GraphManager,
     source_node_id: NodeId,
     hospital_node_ids: List[NodeId],
+    db: Optional[Session] = None,
 ) -> HospitalSelectionResult:
     """Run Dijkstra from `source_node_id` and pick the nearest hospital.
 
@@ -95,6 +102,9 @@ def find_nearest_hospital(
     # Distance map: node_id -> shortest known distance from source.
     distances: Dict[NodeId, float] = {}
 
+    # Previous-node map for path reconstruction: child -> parent.
+    previous: Dict[NodeId, Optional[NodeId]] = {source_node_id: None}
+
     # Min-heap of (distance_from_source, node_id).
     # We may push multiple entries for the same node, but only the first
     # time we pop a node do we finalize its distance.
@@ -130,12 +140,14 @@ def find_nearest_hospital(
             # If this path to neighbor is better, update and push to heap.
             if neighbor_id not in distances or new_dist < distances[neighbor_id]:
                 distances[neighbor_id] = new_dist
+                previous[neighbor_id] = node_id
                 heapq.heappush(heap, (new_dist, neighbor_id))
 
     # After Dijkstra finishes, we select the hospital with the
     # minimum distance among those we reached.
     best_hospital_id: Optional[NodeId] = None
     best_distance: Optional[float] = None
+    distance_km: Optional[float] = None
 
     for hospital_id in hospital_set:
         d = distances.get(hospital_id)
@@ -147,8 +159,52 @@ def find_nearest_hospital(
             best_distance = d
             best_hospital_id = hospital_id
 
+    # Calculate actual path distance in kilometers using edge distances.
+    # If that fails or yields 0, fall back to haversine based on node coordinates.
+    if best_hospital_id is not None:
+        try:
+            # Reconstruct path from source to best hospital using `previous` map.
+            path: List[NodeId] = []
+            cur: Optional[NodeId] = best_hospital_id
+            # Guard against missing previous entries (should not normally happen).
+            while cur is not None and cur in previous:
+                path.append(cur)
+                cur = previous.get(cur)
+            path.reverse()
+
+            # Sum edge distances along the path.
+            total_meters: float = 0.0
+            for i in range(len(path) - 1):
+                u = path[i]
+                v = path[i + 1]
+                edge = graph.get_edge(u, v)
+                if edge is not None and edge.distance is not None:
+                    total_meters += edge.distance
+
+            if total_meters > 0:
+                distance_km = total_meters / 1000.0
+        except Exception as e:
+            print(f"Error calculating path distance from edges: {e}")
+
+        # Final safety net: if we still don't have a positive distance and we
+        # have DB access, fall back to haversine straight-line distance.
+        if (distance_km is None or distance_km == 0) and db is not None:
+            try:
+                source_node = db.query(Node).get(source_node_id)
+                dest_node = db.query(Node).get(best_hospital_id)
+                if source_node and dest_node:
+                    distance_km = haversine_distance(
+                        source_node.lat,
+                        source_node.lon,
+                        dest_node.lat,
+                        dest_node.lon,
+                    )
+            except Exception as e:
+                print(f"Error calculating haversine fallback distance: {e}")
+
     return HospitalSelectionResult(
         best_hospital_id=best_hospital_id,
         best_distance=best_distance,
         distances=distances,
+        distance_km=distance_km,
     )

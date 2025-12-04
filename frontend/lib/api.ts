@@ -16,6 +16,51 @@ export interface CreateAutoEmergencyRequestResponse {
   source_node_id: number;
   destination_hospital_node_id: number;
   estimated_travel_time: number | null;
+  distance_km: number | null;
+  route_nodes?: { id: number; lat: number; lon: number }[] | null;
+}
+
+interface BackendCity {
+  id: number;
+  name: string;
+}
+
+// Debug Dijkstra visualization types
+export interface DebugDijkstraNode {
+  id: number;
+  lat: number;
+  lon: number;
+  name: string | null;
+  type: string | null;
+}
+
+export interface DebugDijkstraEdge {
+  id: number;
+  from_node: number;
+  to_node: number;
+  weight: number;
+  adjusted_weight: number | null;
+  distance: number | null;
+  is_blocked?: boolean | null;
+  has_traffic?: boolean | null;
+}
+
+export interface DebugDijkstraStep {
+  current: number | null;
+  distances: Record<number, number>;
+  visited: number[];
+  frontier: number[];
+}
+
+export interface DebugDijkstraResponse {
+  request_id: number;
+  source_node_id: number;
+  destination_node_id: number;
+  nodes: DebugDijkstraNode[];
+  edges: DebugDijkstraEdge[];
+  steps: DebugDijkstraStep[];
+  shortest_path: number[];
+  total_distance_km: number | null;
 }
 
 export async function createAutoEmergencyRequest(
@@ -42,6 +87,31 @@ export async function createAutoEmergencyRequest(
   }
 
   const data = (await response.json()) as CreateAutoEmergencyRequestResponse;
+  return data;
+}
+
+export async function fetchCities(): Promise<BackendCity[]> {
+  const response = await fetch(`${BACKEND_BASE_URL}/route/cities`);
+
+  if (!response.ok) {
+    throw new Error('Failed to load cities');
+  }
+
+  const data = (await response.json()) as BackendCity[];
+  return data;
+}
+
+// Fetch Dijkstra debug data for a specific emergency request
+export async function fetchDebugDijkstra(requestId: number): Promise<DebugDijkstraResponse> {
+  const response = await fetch(`${BACKEND_BASE_URL}/route/requests/${requestId}/debug/dijkstra`);
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const message = (data && (data.detail || data.message)) || 'Failed to load Dijkstra debug data';
+    throw new Error(message);
+  }
+
+  const data = (await response.json()) as DebugDijkstraResponse;
   return data;
 }
 

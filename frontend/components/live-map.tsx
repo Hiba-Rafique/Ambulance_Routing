@@ -25,8 +25,7 @@ export const LiveMap: React.FC<LiveMapProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const ambulanceMarkerRef = useRef<L.Marker | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
-
-  const [animationIndex, setAnimationIndex] = useState(0);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Initialize map once
   useEffect(() => {
@@ -77,51 +76,87 @@ export const LiveMap: React.FC<LiveMapProps> = ({
 
     // Route polyline
     if (route && route.polyline.length > 0) {
+      const coords = route.polyline.map((p) => [p.lat, p.lng] as [number, number]);
+
       if (routePolylineRef.current) {
-        routePolylineRef.current.setLatLngs(route.polyline.map((p) => [p.lat, p.lng]));
+        routePolylineRef.current.setLatLngs(coords);
       } else {
-        routePolylineRef.current = L.polyline(
-          route.polyline.map((p) => [p.lat, p.lng]),
-          {
-            color: route.traffic_level === 'high' ? '#ea580c' : '#3b82f6',
-            weight: 4,
-            opacity: 0.8,
-            className: 'route-line',
-          }
-        ).addTo(map);
+        routePolylineRef.current = L.polyline(coords, {
+          color: route.traffic_level === 'high' ? '#ea580c' : '#3b82f6',
+          weight: 4,
+          opacity: 0.8,
+          className: 'route-line',
+        }).addTo(map);
       }
 
-      // --- Animate ambulance along route ---
-      if (ambulance) {
-        const coords = route.polyline.map((p) => [p.lat, p.lng] as [number, number]);
+      // Position ambulance along the polyline using a local smooth
+      // animation so the marker always moves steadily towards the goal.
+      // We intentionally ignore backend progress here to avoid the
+      // marker snapping backwards if timings diverge.
+      if (ambulance && coords.length > 1) {
         if (!ambulanceMarkerRef.current) {
           ambulanceMarkerRef.current = L.marker(coords[0], {
-            icon: L.icon({
-              iconUrl:
-                'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="rgb(234, 88, 12)"><path d="M18 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M2 6h14v9H2zm16-1v7h2V5z"/></svg>',
-              iconSize: [32, 32],
-              iconAnchor: [16, 16],
+            icon: L.divIcon({
+              html: '<span style="font-size: 34px; line-height: 1;">🚑</span>',
+              className: 'ambulance-marker',
+              iconSize: [34, 34],
+              iconAnchor: [17, 17],
             }),
           }).addTo(map);
         }
 
-        let idx = 0;
-        const interval = setInterval(() => {
-          if (idx < coords.length && ambulanceMarkerRef.current) {
-            ambulanceMarkerRef.current.setLatLng(coords[idx]);
-            idx++;
+        // Local animation: move from start to end over a reasonable
+        // duration based on route.duration.
+        const durationSeconds = route.duration > 0 ? route.duration : 30;
+        const totalDurationMs = Math.min(Math.max(durationSeconds * 1000, 15000), 60000); // 15–60s
+
+        const start = performance.now();
+
+        const animate = (now: number) => {
+          const elapsed = now - start;
+          const t = Math.min(1, elapsed / totalDurationMs);
+
+          const pathPos = t * (coords.length - 1);
+          const idx = Math.floor(pathPos);
+          const frac = pathPos - idx;
+
+          let lat: number;
+          let lng: number;
+
+          if (idx >= coords.length - 1) {
+            [lat, lng] = coords[coords.length - 1];
           } else {
-            clearInterval(interval);
+            const [lat1, lng1] = coords[idx];
+            const [lat2, lng2] = coords[idx + 1];
+            lat = lat1 + (lat2 - lat1) * frac;
+            lng = lng1 + (lng2 - lng1) * frac;
           }
-        }, 1000); // move every 1 second
+
+          if (ambulanceMarkerRef.current) {
+            ambulanceMarkerRef.current.setLatLng([lat, lng]);
+          }
+
+          if (t < 1) {
+            animationFrameRef.current = requestAnimationFrame(animate);
+          }
+        };
+
+        if (animationFrameRef.current !== null) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+        animationFrameRef.current = requestAnimationFrame(animate);
       }
     }
 
     return () => {
       patientMarker.remove();
       hospitalMarker?.remove();
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
-  }, [ambulance, route, patientLocation, hospital]);
+  }, [route, patientLocation, hospital, ambulance]);
 
   return (
     <Card className="w-full animate-slide-in-up">
