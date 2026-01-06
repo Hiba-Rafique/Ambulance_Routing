@@ -12,11 +12,6 @@ fine for moderate graph sizes and very easy to understand and explain:
 - Time complexity: O(N) per query, where N is the number of nodes
   in the city.
 - Space complexity: O(1) additional space.
-
-Later, if we want to highlight more advanced DSA, we can replace the
-linear scan with a spatial data structure (e.g. k-d tree or R-tree).
-The rest of the system will not need to change, because it only calls
-`find_nearest_node_for_location`.
 """
 
 from __future__ import annotations
@@ -40,7 +35,6 @@ def _squared_euclidean_distance(lat1: float, lon1: float, lat2: float, lon2: flo
     This is an approximation because the Earth is curved, but for
     distances within a city it is good enough and keeps the math simple.
     """
-
     dlat = lat1 - lat2
     dlon = lon1 - lon2
     return dlat * dlat + dlon * dlon

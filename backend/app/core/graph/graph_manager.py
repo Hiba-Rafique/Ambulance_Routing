@@ -6,7 +6,7 @@ This module is intentionally **DSA-focused**:
 - The graph is represented using **adjacency lists**, which are efficient for sparse graphs
   and work well with shortest-path algorithms like Dijkstra.
 
-IMPORTANT DESIGN CHOICES (you should be able to explain these):
+IMPORTANT DESIGN CHOICES:
 1. We use a *directed* adjacency list: each Edge(from_node, to_node, weight) becomes
    one entry in the adjacency list of `from_node`.
    - If the real-world road is two-way, we will store two edges in the DB (A->B and B->A).
@@ -15,8 +15,6 @@ IMPORTANT DESIGN CHOICES (you should be able to explain these):
    - Otherwise, we fall back to the base `weight` column.
 3. We filter out edges where `is_active = False` so closed roads are not used.
 
-This module does **NOT** know anything about HTTP, FastAPI, or requests.
-It only talks to the database session and returns plain Python structures.
 """
 
 from __future__ import annotations
@@ -29,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Node, Edge
 
 
-# Type aliases for clarity when explaining the DSA side
+# Type aliases
 NodeId = int
 EdgeId = int
 # (neighbor_node_id, effective_weight, edge_id)
@@ -143,3 +141,7 @@ def build_graph_for_city(db: Session, city_id: int) -> GraphManager:
             graph.edges[edge.id] = edge
 
     return graph
+
+
+
+

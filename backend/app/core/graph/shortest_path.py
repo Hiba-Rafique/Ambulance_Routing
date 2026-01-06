@@ -10,7 +10,8 @@ from typing import List, Optional, Tuple
 from ..graph.graph_manager import GraphManager, NodeId
 
 
-def shortest_path_and_distance(graph: GraphManager, source: NodeId, target: NodeId) -> Tuple[Optional[float], List[NodeId]]:
+def shortest_path_and_distance(
+    graph: GraphManager, source: NodeId, target: NodeId) -> Tuple[Optional[float], List[NodeId]]:
     if not graph.has_node(source) or not graph.has_node(target):
         return None, []
 
@@ -56,3 +57,13 @@ def shortest_path_and_distance(graph: GraphManager, source: NodeId, target: Node
     path.reverse()
 
     return dist[target], path
+
+
+
+
+
+
+
+
+
+

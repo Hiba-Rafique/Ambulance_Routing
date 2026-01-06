@@ -27,12 +27,9 @@ def apply_dynamic_traffic(graph, db: Session, city_id: int):
     1. Removes edges that have active roadblocks
     2. Updates weights for edges with traffic updates
     """
-
     now = datetime.utcnow()
 
-    # -------------------------------
     # 1. ROADBLOCKS → REMOVE edges
-    # -------------------------------
     # Collect all edge_ids that are currently blocked (start_time <= now <= end_time or end_time is NULL)
     active_roadblocks = (
         db.query(Roadblock)
@@ -59,9 +56,8 @@ def apply_dynamic_traffic(graph, db: Session, city_id: int):
             if (from_node, entry[0]) not in blocked_edges
         ]
 
-    # -------------------------------
+
     # 2. TRAFFIC UPDATES → MODIFY weight
-    # -------------------------------
     # Simple time-of-day model using current UTC hour. During peak hours we
     # apply traffic updates; outside those hours we ignore them.
     peak_hours = {7, 8, 9, 16, 17, 18}  # configurable: morning & evening rush
@@ -95,3 +91,6 @@ def apply_dynamic_traffic(graph, db: Session, city_id: int):
             else:
                 updated_entries.append((to_node, weight, edge_id))
         graph.adjacency[from_node] = updated_entries
+
+
+
