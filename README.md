@@ -1,6 +1,17 @@
 # DSA Ambulance Routing System
 
 A comprehensive ambulance routing system that uses graph algorithms and real-time traffic data to optimize emergency medical response times. The system features a FastAPI backend with Dijkstra's algorithm for shortest path calculation and a Next.js frontend with interactive mapping.
+<br>
+<p align="center">
+  <img width="851" height="356" alt="image" src="https://github.com/user-attachments/assets/533f7d0f-c9d8-4d81-9829-86f591aa2995" />
+  <br>
+   <br>
+  <img width="843" height="539" alt="image" src="https://github.com/user-attachments/assets/3a22a628-15ba-475b-9d33-cb83e9646ec2" />
+  <br /> <br>
+  <img width="803" height="501" alt="image" src="https://github.com/user-attachments/assets/fa829660-b6c0-410a-960b-59b5c680db9b" />
+</p>
+
+
 
 ## Features
 
